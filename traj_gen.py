@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import math
 import sys
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -10,7 +11,7 @@ from pycontrails.models.cocip import Cocip
 from pycontrails.datalib.ecmwf import ERA5
 from pycontrails.models.ps_model import PSFlight
 from pycontrails.models import emissions
-from pycontrails.models.dry_advection import DryAdvection
+from pycontrails.models.dry_advection2 import DryAdvection
 from datetime import datetime, timedelta
 
 def main():
@@ -35,6 +36,10 @@ def main():
     met = era5pl.open_metdataset()
     #rad = era5sl.open_metdataset()
 
+    print(met['eastward_wind'].values)
+    print(met['northward_wind'].values)    
+    
+
     # define start coords
     coords0 = (0, 0, 11500) # lon, lat, alt
     speed = 100 # m/s
@@ -47,6 +52,7 @@ def main():
     # init fl and dry_adv dicts
     fl_dict = {}
     dry_adv_dict = {}
+    concs_dict = {}
 
     # set up flight path plotting
     ax = plt.axes()
@@ -61,20 +67,42 @@ def main():
 
         dry_adv_dict = dry_advection(i, dry_adv_dict, fl_dict, met)
 
-        ax.scatter(fl_dict[i]["longitude"], fl_dict[i]["latitude"], s=3, color="red", label="Flight path")
+        # convert fl_dict and dry_adv_dict to dataframes
+        fl_dict[i] = fl_dict[i].dataframe
+        dry_adv_dict[i] = dry_adv_dict[i].dataframe
+
+        fl_dict[i].drop(columns=["co2", "nox", "h2o", "so2", "sulphates", "co", "hc", "nvpm_mass", "nvpm_number"], inplace=True)
+        fl_dict[i]["waypoint"] = fl_dict[i].index
+        #fl_dict[i]["time"] = pd.to_datetime(fl_dict[i]["time"])     
+
+        # # merge fl_dict and dry_adv_dict
+        # concs_dict[i] = pd.merge(
+        #     fl_dict[i][["time", "waypoint", "flight_id", "longitude", "latitude", "altitude", , ]],
+        # )
+
+        ax.plot(fl_dict[i]["longitude"], fl_dict[i]["latitude"], color="red", label="Flight path")
         ax.scatter(dry_adv_dict[i]["longitude"], dry_adv_dict[i]["latitude"], s=0.1, label="Plume evolution")
 
     ax.legend()
     ax.set_title("Flight path and plume evolution under dry advection")
 
-    pd.set_option('display.max_columns', None)
 
-    print((fl_dict[0]).dataframe)
+    # Plotting width and depth of each plume waypoint against time
+    for i in range(1):
+        plt.figure()
+        
+        plt.scatter(dry_adv_dict[i]["time"], dry_adv_dict[i]["advection_distance"], label="Advection Distance")
+        plt.scatter(dry_adv_dict[i]["time"], dry_adv_dict[i]["width"], label="Width")
+        plt.scatter(dry_adv_dict[i]["time"], dry_adv_dict[i]["depth"], label="Depth")
+        plt.xlabel("Time")
+        plt.ylabel("Width/Depth")
+        plt.title(f"Plume Waypoint {i+1}")
+        plt.legend()
+        plt.show()
 
-    np.set_printoptions(threshold=sys.maxsize)
-    print((dry_adv_dict[0]["waypoint"]))
+    (fl_dict[0]).to_csv("fl.csv")
+    (dry_adv_dict[0]).to_csv("plume_evolution.csv")
 
-    plt.show()
 
 def traj_gen(i, fl_dict, met, coords, flight_time, ts_traj, speed, theta, bbox, sep_long, sep_lat, sep_alt):
 
@@ -83,6 +111,7 @@ def traj_gen(i, fl_dict, met, coords, flight_time, ts_traj, speed, theta, bbox, 
         fl_dict[0] = leader_traj(coords, flight_time, ts_traj, speed, theta, bbox)
         fl_dict[0].attrs = {"flight_id": int(0), "aircraft_type": "A320"}
         fl_dict[0]["air_temperature"] = models.interpolate_met(met, fl_dict[0], "air_temperature")
+        fl_dict[i]["specific_humidity"] = models.interpolate_met(met, fl_dict[i], "specific_humidity")
 
     else:
         # generate follower flights
@@ -91,22 +120,31 @@ def traj_gen(i, fl_dict, met, coords, flight_time, ts_traj, speed, theta, bbox, 
         fl_dict[i]["air_temperature"] = models.interpolate_met(met, fl_dict[i], "air_temperature")
         fl_dict[i]["specific_humidity"] = models.interpolate_met(met, fl_dict[i], "specific_humidity")
 
-        # get ac_performance
-        fl_dict[i]["true_airspeed"] = fl_dict[i].segment_groundspeed()
+    # get ac_performance
+    fl_dict[i]["true_airspeed"] = fl_dict[i].segment_groundspeed()
 
-        ps_model = PSFlight()
-        fl_dict[i] = ps_model.eval(fl_dict[i])
+    ps_model = PSFlight()
+    fl_dict[i] = ps_model.eval(fl_dict[i])
 
-        # get emissions
-        emi = emissions.Emissions()
-        fl_dict[i] = emi.eval(fl_dict[i])
+    # get emissions
+    emi = emissions.Emissions()
+    fl_dict[i] = emi.eval(fl_dict[i])
+
+    # get em mass per metre
+    fl_dict[i]["co2_m"] = 3.16 * fl_dict[i]["fuel_flow"] / fl_dict[i]["true_airspeed"]
+    fl_dict[i]["h2o_m"] = 1.23 * fl_dict[i]["fuel_flow"] / fl_dict[i]["true_airspeed"]
+    fl_dict[i]["so2_m"] = 0.00084 * fl_dict[i]["fuel_flow"] / fl_dict[i]["true_airspeed"]
+    fl_dict[i]["nox_m"] = fl_dict[i]["nox_ei"] * fl_dict[i]["fuel_flow"] / fl_dict[i]["true_airspeed"]
+    fl_dict[i]["co_m"] = fl_dict[i]["co_ei"] * fl_dict[i]["fuel_flow"] / fl_dict[i]["true_airspeed"]
+    fl_dict[i]["hc_m"] = fl_dict[i]["hc_ei"] * fl_dict[i]["fuel_flow"] / fl_dict[i]["true_airspeed"]
+    fl_dict[i]["nvpm_m"] = fl_dict[i]["nvpm_ei_m"] * fl_dict[i]["fuel_flow"] / fl_dict[i]["true_airspeed"]
 
     return fl_dict
         
 def dry_advection(i, dry_adv_dict, fl_dict, met):
             
     # do dry advection
-    dt_integration = pd.Timedelta(minutes=1)
+    dt_integration = pd.Timedelta(minutes=10)
     max_age = pd.Timedelta(hours=6)
 
     params = {
@@ -120,6 +158,12 @@ def dry_advection(i, dry_adv_dict, fl_dict, met):
     dry_adv
 
     dry_adv_dict[i] = dry_adv.eval(fl_dict[i])
+
+    dry_adv_dict[i] = calculate_max_width_coords(dry_adv_dict[i])
+
+    dry_adv_dict[i] = calculate_advection_distance(dry_adv_dict[i])
+
+    dry_adv_dict[i] = calculate_azimuth(dry_adv_dict[i])
 
     return dry_adv_dict
 
@@ -174,23 +218,50 @@ def follow_traj(coords, flight_time, ts_traj, speed, theta, bbox, sep_long, sep_
 
     return fl
 
-def plot_trajectory(ax, x, y, z, label):
-    ax.plot3D(x, y, z, label=label)
+def calculate_max_width_coords(dry_adv_dict):
+    # Convert azimuth to radians
+    azimuth_rad = np.radians(dry_adv_dict["azimuth"])
+
+    # Earth's radius in meters (approximate value, can be adjusted based on specific requirements)
+    earth_radius = 6371000.0
+
+    # Convert width from meters to degrees
+    width_deg = dry_adv_dict["width"] / (earth_radius * np.cos(np.radians(dry_adv_dict["latitude"])))
 
 
-# plot_trajectory(ax, x2, y2, z2, "Flight 2")
-# ax.set_xlabel('X (meters)')
-# ax.set_ylabel('Y (meters)')
-# ax.set_zlabel('Altitude (meters)')
-# ax.legend()
+    # Calculate coordinates of points at ±w/2 from the center
+    dry_adv_dict["lon_plus"] = dry_adv_dict["longitude"] + (width_deg / 2) * np.cos(azimuth_rad)
+    dry_adv_dict["lat_plus"] = dry_adv_dict["latitude"] + (width_deg / 2) * np.sin(azimuth_rad)
 
-# plt.show()
+    dry_adv_dict["lon_minus"] = dry_adv_dict["longitude"] - (width_deg / 2) * np.cos(azimuth_rad)
+    dry_adv_dict["lat_minus"] = dry_adv_dict["latitude"] - (width_deg / 2) * np.sin(azimuth_rad)
 
+    return dry_adv_dict
 
-# def ac_performance(traj, ac_type, met):
-#     return
+def calculate_advection_distance(dry_adv_dict):
+    # Original coordinates
+    orig_lon = np.radians(dry_adv_dict["longitude"][0])
+    orig_lat = np.radians(dry_adv_dict["latitude"][0])
+    new_lon = np.radians(dry_adv_dict["longitude"])
+    new_lat = np.radians(dry_adv_dict["latitude"])
 
-# def emissions()
-    
+    # Calculate the differences
+    dlat = new_lat - orig_lat
+    dlon = new_lon - orig_lon
+
+    # Use the Haversine formula to calculate the distance
+    a = np.sin(dlat/2)**2 + np.cos(orig_lat) * np.cos(new_lat) * np.sin(dlon/2)**2
+    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1-a))
+
+    # Earth's radius in meters (approximate value, can be adjusted based on specific requirements)
+    earth_radius = 6371000.0
+
+    # Calculate the distance
+    distance = earth_radius * c
+
+    dry_adv_dict["advection_distance"] = distance
+
+    return dry_adv_dict
+
 if __name__=="__main__":
     main()
