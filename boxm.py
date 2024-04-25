@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import dask.array as da
 import xarray as xr
 import pathlib
 import numpy.typing as npt
@@ -28,14 +29,14 @@ pd.set_option('display.max_rows', None)
 
 def main():
     # define flight properties
-    flight_time = ("2022-03-02 00:00:00", "2022-03-02 02:00:00")
-    coords0 = (-.5, -.5, 11500)
+    flight_time = ("2022-03-02 11:00:00", "2022-03-02 12:00:00")
+    coords0 = (-.6, -.6, 11500)
     speed = 100.0 # m/s
     theta = 0.0 # degrees
     sep_long = 5000 # m
     sep_lat = 2000 # m
     sep_alt = 0 # m
-    n_ac = 1
+    n_ac = 5
    
     dt_integration = pd.Timedelta(minutes=5)
     max_age = pd.Timedelta(hours=3)
@@ -45,7 +46,7 @@ def main():
     ts_fl = "2min" # trajectory time step
 
     # define sim properties
-    sim_time = ("2022-03-02 00:00:00", "2022-03-02 5:00:00")
+    sim_time = ("2022-03-02 10:00:00", "2022-03-02 17:00:00")
     bbox = (-1.0, -1.0, 0.0, 0.0, 11000.0, 12000.0) # lon_min, lat_min, lon_max, lat_max, alt_min, alt_max
     levels = [400.0, 300.0, 200.0, 100.0] # pressure levels
     
@@ -53,8 +54,8 @@ def main():
     vert_res_chem = 500 # meters    
     ts_chem = "5min" # chemistry time step
     
-    lons_chem = np.arange(bbox[0] + 0.1, bbox[2] - 0.1, horiz_res_chem)
-    lats_chem = np.arange(bbox[1] + 0.1, bbox[3] - 0.1, horiz_res_chem)
+    lons_chem = np.arange(bbox[0] + 0.2, bbox[2] - 0.2, horiz_res_chem)
+    lats_chem = np.arange(bbox[1] + 0.2, bbox[3] - 0.2, horiz_res_chem)
     alts_chem = np.arange(bbox[4] + vert_res_chem, bbox[5], vert_res_chem)
     timesteps_chem = np.array(datalib.parse_timesteps(sim_time, freq=ts_chem), dtype="datetime64[ns]")
 
@@ -95,10 +96,13 @@ def main():
         n_ac=n_ac
     )
 
+    met.data = met.data.chunk({'longitude': 'auto', 'latitude': 'auto', 'level': 'auto', 'time': 'auto'})
+    emi = emi.chunk({'longitude': 'auto', 'latitude': 'auto', 'time': 'auto'})
+
     met.data = met.data.interp(longitude=lons_chem, latitude=lats_chem, level=units.m_to_pl(alts_chem), time=timesteps_chem, method="linear")
     emi = emi.interp(longitude=lons_chem, latitude=lats_chem, time=timesteps_chem, method="linear")
     
-    animate_pl(emi, "nox_m", 2)
+    #animate_pl(emi, "nox_m", 2)
 
     to_csvs(
          met, 
@@ -603,28 +607,36 @@ def animate_pl(plume_data, species: str, i):
 ##################### TO CSVS #####################
 # send dfs to csvs for chem analysis
 def to_csvs(met, bg_chem, emi): 
-
-    met_df = met.data.to_dataframe(dim_order=['time', 'level', 'longitude', 'latitude']).reset_index()
+    met_df = met.data.to_dask_dataframe(dim_order=['time', 'level', 'longitude', 'latitude'])
+    
+    #met_df = met.data.to_dataframe(dim_order=['time', 'level', 'longitude', 'latitude']).reset_index()
 
     met_df["latitude"] = met_df["latitude"].map("{:+08.3f}".format)
     met_df["longitude"] = met_df["longitude"].map("{:+08.3f}".format)
     met_df["sza"] = met_df["sza"].map("{:+0.3e}".format)
-    met_df = met_df.apply(lambda x: x.map("{:0.3e}".format) if x.dtype in ['float32', 'float64'] else x)
+    # met_df = met_df.map_partitions(lambda df: df.apply(np.vectorize(lambda x: "{:0.3e}".format(x) if isinstance(x, (float, np.float32, np.float64)) else x)))
+    met_df = met_df.apply((lambda x: x.map("{:0.3e}".format) if x.dtype in ['float32', 'float64'] else x), axis=1)
 
     # Convert bg_chem to df
-    bg_chem_df = bg_chem.to_dataframe(dim_order=['level', 'longitude', 'latitude']).reset_index()
+    bg_chem_df = bg_chem.to_dask_dataframe(dim_order=['level', 'longitude', 'latitude'])
+
+    #bg_chem_df = bg_chem.to_dataframe(dim_order=['level', 'longitude', 'latitude']).reset_index()
     
     bg_chem_df["latitude"] = bg_chem_df["latitude"].map("{:+08.3f}".format)
     bg_chem_df["longitude"] = bg_chem_df["longitude"].map("{:+08.3f}".format)
     bg_chem_df["month"] = bg_chem_df["month"].map("{:02d}".format)
-    bg_chem_df = bg_chem_df.apply(lambda x: x.map("{:0.3e}".format) if x.dtype in ['float32', 'float64'] else x)
+    # bg_chem_df = bg_chem_df.map_partitions(lambda df: df.apply(np.vectorize(lambda x: "{:0.3e}".format(x) if isinstance(x, (float, np.float32, np.float64)) else x)))
+    bg_chem_df = bg_chem_df.apply((lambda x: x.map("{:0.3e}".format) if x.dtype in ['float32', 'float64'] else x), axis=1) 
     
     # # Convert emi to df
-    emi_df = emi.to_dataframe(dim_order=['time', 'longitude', 'latitude']).fillna(0).reset_index()
+    emi_df = emi.to_dask_dataframe(dim_order=['time', 'longitude', 'latitude']).fillna(0)
+
+    #emi_df = emi.to_dataframe(dim_order=['time', 'longitude', 'latitude']).fillna(0).reset_index()
     
     emi_df["latitude"] = emi_df["latitude"].map("{:+08.3f}".format)
     emi_df["longitude"] = emi_df["longitude"].map("{:+08.3f}".format)
-    emi_df = emi_df.apply(lambda x: x.map("{:0.3e}".format) if x.dtype in ['float32', 'float64'] else x)
+    # emi_df = emi_df.map_partitions(lambda df: df.apply(np.vectorize(lambda x: "{:0.3e}".format(x) if isinstance(x, (float, np.float32, np.float64)) else x)))
+    emi_df = emi_df.apply((lambda x: x.map("{:0.3e}".format) if x.dtype in ['float32', 'float64'] else x), axis=1)
 
     # Remove temporary files if they exist
     if os.path.exists("met_df.csv"):
@@ -634,14 +646,18 @@ def to_csvs(met, bg_chem, emi):
     if os.path.exists("emi_df.csv"):
             os.remove("emi_df.csv")
 
+    # met_df_pd = met_df.compute().reset_index(drop=True)
+    # bg_chem_df_pd = bg_chem_df.compute().reset_index(drop=True)
+    # emi_df_pd = emi_df.compute().reset_index(drop=True)
+
     # Write DataFrame 1 to the temporary file
-    met_df.to_csv("met_df.csv", index=False)
+    met_df.to_csv("met_df.csv", single_file=True, index=False)
 
     # Write DataFrame 2 to the temporary file
-    bg_chem_df.to_csv("bg_chem_df.csv", index=False)
+    bg_chem_df.to_csv("bg_chem_df.csv", single_file=True, index=False)
 
     # Write DataFrame 3 to the temporary file
-    emi_df.to_csv("emi_df.csv", index=False)
+    emi_df.to_csv("emi_df.csv", single_file=True, index=False)
 
     return
 

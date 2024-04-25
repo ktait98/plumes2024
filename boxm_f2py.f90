@@ -7,8 +7,8 @@ MODULE BOXM_F2PY
     ! DEFINE MET INPUTS
     CHARACTER(10) :: DATE
     CHARACTER(9) :: TIME
-    REAL :: LEVEL, LON, LAT
-    DOUBLE PRECISION, ALLOCATABLE :: TEMP(:), SPEC_HUM(:), REL_HUM(:), PRESSURE(:), ALT(:), M(:), H2O(:), O2(:), N2(:), SZA(:)
+    DOUBLE PRECISION, ALLOCATABLE :: LEVEL(:), LON(:), LAT(:), TEMP(:), SPEC_HUM(:), REL_HUM(:), PRESSURE(:)
+    DOUBLE PRECISION, ALLOCATABLE :: ALT(:), M(:), H2O(:), O2(:), N2(:), SZA(:)
 
     ! DEFINE CHEM VARIABLES
     DOUBLE PRECISION, ALLOCATABLE :: Y(:,:), YP(:,:), RC(:,:), J(:,:), DJ(:,:), FL(:,:), EMI(:,:), EMIP(:,:)
@@ -41,14 +41,16 @@ MODULE BOXM_F2PY
 
     INTEGER :: NS, NTC, NPC, NPP, NFL, NEMI
 
-    INTEGER S, CELL, DUMMYMONTH
+    INTEGER :: S, CELL, DUMMYMONTH 
+    
+    REAL :: U_WIND, V_WIND, VERT_V, SHEAR, GEO
 
-    CHARACTER(LEN=120)  :: MET_HEADER
-    CHARACTER(LEN=149)  :: MET_LINE
+    CHARACTER(LEN=300)  :: MET_HEADER
+    CHARACTER(LEN=300)  :: MET_LINE
     CHARACTER(LEN=1630) :: CHEM_HEADER
-    CHARACTER(LEN=2221) :: CHEM_LINE
-    CHARACTER(LEN=1608) :: EMI_HEADER
-    CHARACTER(LEN=2238) :: EMI_LINE
+    CHARACTER(LEN=2230) :: CHEM_LINE
+    CHARACTER(LEN=50) :: EMI_HEADER
+    CHARACTER(LEN=100) :: EMI_LINE
 
     
 CONTAINS
@@ -63,7 +65,7 @@ CONTAINS
         NPC = 96
         NPP = 57
         NFL = 130
-        NEMI = 13
+        NEMI = 2
         TIME1 = 0.0
         TSTORE = 0.0
 
@@ -79,10 +81,11 @@ CONTAINS
         OPEN(UNIT=11, FILE='emi_df.csv', STATUS='OLD', ACTION='READ')
         READ(11, '(A)') EMI_HEADER
 
-        517 FORMAT(ES9.3, 50(",", ES13.6e3))
-        519 FORMAT(A, 50(",", A))
-        520 FORMAT(A, 4(",", A))
-        521 FORMAT(ES9.3, 4(",", ES13.6e3))
+        517 FORMAT(ES9.3, 50(",", ES16.9e3))
+        519 FORMAT(A, 52(",", A))
+        520 FORMAT(A, 22(",", A))
+        530 FORMAT(A, 4(",", A))
+        521 FORMAT(ES9.3, 4(",", ES16.9e3))
 
         ! OPEN OUTPUT FILES
         OPEN(15, FILE ='Y_F2PY.OUT', STATUS = 'UNKNOWN')
@@ -91,25 +94,28 @@ CONTAINS
         OPEN(18, FILE ='DJ_F2PY.OUT', STATUS = 'UNKNOWN')
         OPEN(19, FILE ='RC_F2PY.OUT', STATUS = 'UNKNOWN') 
 
-        WRITE(15,519)'TIME', 'Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6', 'Y7', 'Y8', 'Y9', 'Y10', 'Y11', 'Y12', &
-        'Y13', 'Y14', 'Y15', 'Y16', 'Y17', 'Y18', 'Y19', 'Y20', 'Y21', 'Y22', 'Y23', 'Y24', 'Y25', 'Y26', &
-        'Y27', 'Y28', 'Y29', 'Y30', 'Y31', 'Y32', 'Y33', 'Y34', 'Y35', 'Y36', 'Y37', 'Y38', 'Y39', 'Y40', &
-        'Y41', 'Y42', 'Y43', 'Y44', 'Y45', 'Y46', 'Y47', 'Y48', 'Y49', 'Y50'
+        WRITE(15,520) 'time', 'latitude', 'longitude', 'Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6', 'Y7', &
+        'Y8', 'Y9', 'Y10', 'Y11', 'Y12', 'Y13', 'Y14', 'Y15', 'Y16', 'Y17', 'Y18', 'Y19', 'Y20'
 
-        WRITE(16,520)'TIME',' ZEN', 'TEMP', 'O2', 'N2'
+        ! 'Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6', 'Y7', 'Y8', 'Y9', 'Y10', 'Y11', 'Y12', &
+        ! 'Y13', 'Y14', 'Y15', 'Y16', 'Y17', 'Y18', 'Y19', 'Y20', 'Y21', 'Y22', 'Y23', 'Y24', 'Y25', 'Y26', &
+        ! 'Y27', 'Y28', 'Y29', 'Y30', 'Y31', 'Y32', 'Y33', 'Y34', 'Y35', 'Y36', 'Y37', 'Y38', 'Y39', 'Y40', &
+        ! 'Y41', 'Y42', 'Y43', 'Y44', 'Y45', 'Y46', 'Y47', 'Y48', 'Y49', 'Y50'
 
-        WRITE(17,519)'TIME', 'J1', 'J2', 'J3', 'J4', 'J5', 'J6', 'J7', 'J8', 'J9', 'J10', 'J11', 'J12', &
-        'J13','J14', 'J15', 'J16', 'J17', 'J18', 'J19', 'J20', 'J21', 'J22', 'J23', 'J24', 'J25', 'J26', &
+        WRITE(16,530) 'time', 'latitude', 'longitude', 'ZEN', 'TEMP'
+
+        WRITE(17,519) 'time', 'latitude', 'longitude', 'J1', 'J2', 'J3', 'J4', 'J5', 'J6', 'J7', 'J8', 'J9', 'J10', 'J11', &
+        'J12', 'J13','J14', 'J15', 'J16', 'J17', 'J18', 'J19', 'J20', 'J21', 'J22', 'J23', 'J24', 'J25', 'J26', &
         'J27', 'J28', 'J29', 'J30', 'J31', 'J32', 'J33', 'J34', 'J35', 'J36', 'J37', 'J38', 'J39', 'J40', &
         'J41', 'J42', 'J43', 'J44', 'J45', 'J46', 'J47', 'J48', 'J49', 'J50'
 
-        WRITE(18,519)'TIME', 'DJ1', 'DJ2', 'DJ3', 'DJ4', 'DJ5', 'DJ6', 'DJ7', 'DJ8', 'DJ9', 'DJ10', 'DJ11', &
-        'DJ12', 'DJ13','DJ14', 'DJ15', 'DJ16', 'DJ17', 'DJ18', 'DJ19', 'DJ20', 'DJ21', 'DJ22', 'DJ23', 'DJ24', &
+        WRITE(18,519) 'time', 'latitude', 'longitude', 'DJ1', 'DJ2', 'DJ3', 'DJ4', 'DJ5', 'DJ6', 'DJ7', 'DJ8', 'DJ9', 'DJ10', &
+        'DJ11', 'DJ12', 'DJ13','DJ14', 'DJ15', 'DJ16', 'DJ17', 'DJ18', 'DJ19', 'DJ20', 'DJ21', 'DJ22', 'DJ23', 'DJ24', &
         'DJ25', 'DJ26', 'DJ27', 'DJ28', 'DJ29', 'DJ30', 'DJ31', 'DJ32', 'DJ33', 'DJ34', 'DJ35', 'DJ36', 'DJ37', &
         'DJ38', 'DJ39', 'DJ40', 'DJ41', 'DJ42', 'DJ43', 'DJ44', 'DJ45', 'DJ46', 'DJ47', 'DJ48', 'DJ49', 'DJ50'
 
-        WRITE(19,519)'TIME', 'RC1', 'RC2', 'RC3', 'RC4', 'RC5', 'RC6', 'RC7', 'RC8', 'RC9', 'RC10', 'RC11', &
-        'RC12', 'RC13','RC14', 'RC15', 'RC16', 'RC17', 'RC18', 'RC19', 'RC20', 'RC21', 'RC22', 'RC23', 'RC24', &
+        WRITE(19,519) 'time', 'latitude', 'longitude', 'RC1', 'RC2', 'RC3', 'RC4', 'RC5', 'RC6', 'RC7', 'RC8', 'RC9', 'RC10', &
+        'RC11', 'RC12', 'RC13','RC14', 'RC15', 'RC16', 'RC17', 'RC18', 'RC19', 'RC20', 'RC21', 'RC22', 'RC23', 'RC24', &
         'RC25', 'RC26', 'RC27', 'RC28', 'RC29', 'RC30', 'RC31', 'RC32', 'RC33', 'RC34', 'RC35', 'RC36', 'RC37', &
         'RC38', 'RC39', 'RC40', 'RC41', 'RC42', 'RC43', 'RC44', 'RC45', 'RC46', 'RC47', 'RC48', 'RC49', 'RC50'
 
@@ -129,6 +135,18 @@ CONTAINS
         IF (.NOT. ALLOCATED(PRESSURE)) THEN
             ALLOCATE(PRESSURE(NCELL))
             PRESSURE(:) = 0.0
+        END IF
+        IF (.NOT. ALLOCATED(LEVEL)) THEN
+            ALLOCATE(LEVEL(NCELL))
+            LEVEL(:) = 0.0
+        END IF
+        IF (.NOT. ALLOCATED(LAT)) THEN
+            ALLOCATE(LAT(NCELL))
+            LAT(:) = 0.0
+        END IF
+        IF (.NOT. ALLOCATED(LON)) THEN
+            ALLOCATE(LON(NCELL))
+            LON(:) = 0.0
         END IF
         IF (.NOT. ALLOCATED(ALT)) THEN
             ALLOCATE(ALT(NCELL))
@@ -640,47 +658,7 @@ CONTAINS
         END IF
        
         DO CELL = 1,NCELL
-            ! READ DATA
-            READ(9, '(A)', IOSTAT=IOSTAT) MET_LINE
-            IF (IOSTAT /= 0) EXIT
-
-            READ(MET_LINE, *) DATE, TIME, LEVEL, LON, LAT, TEMP(CELL), SPEC_HUM(CELL), &   
-            REL_HUM(CELL), PRESSURE(CELL), ALT(CELL), M(CELL), H2O(CELL), O2(CELL), &
-            N2(CELL), SZA(CELL)
-
-            READ(10, '(A)', IOSTAT=IOSTAT)   CHEM_LINE
-            IF (IOSTAT /= 0) EXIT
-
-            READ(CHEM_LINE, *) LEVEL, LON, LAT, &
-            DUMMYMONTH, (Y(CELL,S), S=1, NS)
-
-            READ(11, '(A)', IOSTAT=IOSTAT) EMI_LINE
-            IF (IOSTAT /= 0) EXIT
-
-            READ(EMI_LINE, *) DATE, TIME, LEVEL, &
-            LON, LAT, (EMI(CELL,S), S=1, NEMI)
-
-            PPB = M(CELL)/1E+09
-
-            ! INIT Y
-            Y(CELL,:) = Y(CELL,:) * PPB 
-            EMI(CELL,:) = EMI(CELL,:) * PPB
-
-            ! INIT EMI
-            Y(CELL,4) = Y(CELL,4) + EMI(CELL,1)
-            Y(CELL,11) = Y(CELL,11) + EMI(CELL,2)
-            Y(CELL,39) = Y(CELL,39) + EMI(CELL,3)
-            Y(CELL,42) = Y(CELL,42) + EMI(CELL,4)
-            Y(CELL,73) = Y(CELL,73) + EMI(CELL,5)
-            Y(CELL,23) = Y(CELL,23) + EMI(CELL,6)
-            Y(CELL,30) = Y(CELL,30) + EMI(CELL,7)
-            Y(CELL,25) = Y(CELL,25) + EMI(CELL,8)
-            Y(CELL,32) = Y(CELL,32) + EMI(CELL,9)
-            Y(CELL,59) = Y(CELL,59) + EMI(CELL,10)
-            Y(CELL,61) = Y(CELL,61) + EMI(CELL,11)
-            Y(CELL,64) = Y(CELL,64) + EMI(CELL,12)
-            Y(CELL,71) = Y(CELL,71) + EMI(CELL,13)
-
+            
         END DO
 
     END SUBROUTINE INIT
@@ -691,20 +669,76 @@ CONTAINS
         INTEGER :: NCELL
 
         DO CELL = 1,NCELL
-            ! READ MET DATA FOR CURRENT TS
-            READ(9, '(A)') MET_LINE
-            READ(MET_LINE, *) DATE, TIME, LEVEL, LON, LAT, TEMP(CELL), SPEC_HUM(CELL), &   
-            REL_HUM(CELL), PRESSURE(CELL), ALT(CELL), M(CELL), H2O(CELL), O2(CELL), &
+
+            ! READ DATA
+            READ(9, '(A)', IOSTAT=IOSTAT) MET_LINE
+            IF (IOSTAT /= 0) EXIT
+
+            READ(MET_LINE, *) DATE, TIME, LEVEL(CELL), LON(CELL), LAT(CELL), PRESSURE(CELL), ALT(CELL), &
+            TEMP(CELL), SPEC_HUM(CELL), U_WIND, V_WIND, VERT_V, SHEAR, GEO, &
+            REL_HUM(CELL), M(CELL), H2O(CELL), O2(CELL), &
             N2(CELL), SZA(CELL)
+            
+            IF (TIME1 .EQ. 0.0) THEN
+                READ(10, '(A)', IOSTAT=IOSTAT) CHEM_LINE
+                IF (IOSTAT /= 0) EXIT
+                READ(CHEM_LINE, *) LEVEL(CELL), LON(CELL), LAT(CELL), &
+                DUMMYMONTH, (Y(CELL,S), S=1, NS)
+
+                ! FOR CONVERTING TO MOLECULES/CM^3
+                PPB = M(CELL)/1E+09
+
+                ! INIT Y
+                Y(CELL,:) = Y(CELL,:) * PPB 
+            END IF
+
+            READ(11, '(A)', IOSTAT=IOSTAT) EMI_LINE
+            IF (IOSTAT /= 0) EXIT
 
             ! SET PREVIOUS EMI TO EMIP
             EMIP(CELL,:) = EMI(CELL,:)
 
-            ! READ EMI DATA FOR CURRENT TS
-            READ(11, '(A)') EMI_LINE
-            READ(EMI_LINE, *) DATE, TIME, LEVEL, LON, LAT, (EMI(CELL,S), S=1, NEMI)
+            READ(EMI_LINE, *) DATE, TIME, LON(CELL), LAT(CELL), &
+            (EMI(CELL,S), S=1, NEMI)
+
+            ! ! INIT EMI
+            ! Y(CELL,4) = Y(CELL,4) + EMI(CELL,1)
+            ! Y(CELL,11) = Y(CELL,11) + EMI(CELL,2)
+            ! Y(CELL,39) = Y(CELL,39) + EMI(CELL,3)
+            ! Y(CELL,42) = Y(CELL,42) + EMI(CELL,4)
+            ! Y(CELL,73) = Y(CELL,73) + EMI(CELL,5)
+            ! Y(CELL,23) = Y(CELL,23) + EMI(CELL,6)
+            ! Y(CELL,30) = Y(CELL,30) + EMI(CELL,7)
+            ! Y(CELL,25) = Y(CELL,25) + EMI(CELL,8)
+            ! Y(CELL,32) = Y(CELL,32) + EMI(CELL,9)
+            ! Y(CELL,59) = Y(CELL,59) + EMI(CELL,10)
+            ! Y(CELL,61) = Y(CELL,61) + EMI(CELL,11)
+            ! Y(CELL,64) = Y(CELL,64) + EMI(CELL,12)
+            ! Y(CELL,71) = Y(CELL,71) + EMI(CELL,13)
+
+
+
+
+
+
+
+
+
+            ! READ MET DATA FOR CURRENT TS
+            ! READ(9, '(A)') MET_LINE
+            ! READ(MET_LINE, *) DATE, TIME, LEVEL(CELL), LON(CELL), LAT(CELL), TEMP(CELL), SPEC_HUM(CELL), &   
+            ! U_WIND, V_WIND, VERT_V, SHEAR, GEO, &
+            ! REL_HUM(CELL), PRESSURE(CELL), ALT(CELL), M(CELL), H2O(CELL), O2(CELL), &
+            ! N2(CELL), SZA(CELL)
+
+            ! ! SET PREVIOUS EMI TO EMIP
+            ! EMIP(CELL,:) = EMI(CELL,:)
+            
+            ! ! READ EMI DATA FOR CURRENT TS
+            ! READ(11, '(A)') EMI_LINE
+            ! READ(EMI_LINE, *) DATE, TIME, LON(CELL), LAT(CELL), (EMI(CELL,S), S=1, NEMI)
         
-            EMI(CELL,:) = EMI(CELL,:) * PPB
+            ! EMI(CELL,:) = EMI(CELL,:) * PPB
 
         END DO
     END SUBROUTINE READ
@@ -2793,26 +2827,35 @@ CONTAINS
 
     END SUBROUTINE PHOTOL
 
-    SUBROUTINE DERIV(DTS)
+    SUBROUTINE DERIV(DTS, NCELL)
         IMPLICIT NONE
         REAL :: DTS
 
         ! YP IS PREVIOUS Y LESS PREVIOUS EMI PLUS CURRENT EMI
-        YP(:,:) = Y(:,:)
-         
-        YP(:,4) = Y(:,4) - EMIP(:,1) + EMI(:,1)
-        YP(:,11) = Y(:,11) - EMIP(:,2) + EMI(:,2)
-        YP(:,39) = Y(:,39) - EMIP(:,3) + EMI(:,3)
-        YP(:,42) = Y(:,42) - EMIP(:,4) + EMI(:,4)
-        YP(:,73) = Y(:,73) - EMIP(:,5) + EMI(:,5)
-        YP(:,23) = Y(:,23) - EMIP(:,6) + EMI(:,6)
-        YP(:,30) = Y(:,30) - EMIP(:,7) + EMI(:,7)
-        YP(:,25) = Y(:,25) - EMIP(:,8) + EMI(:,8)
-        YP(:,32) = Y(:,32) - EMIP(:,9) + EMI(:,9)
-        YP(:,59) = Y(:,59) - EMIP(:,10) + EMI(:,10)
-        YP(:,61) = Y(:,61) - EMIP(:,11) + EMI(:,11)
-        YP(:,64) = Y(:,64) - EMIP(:,12) + EMI(:,12)
-        YP(:,71) = Y(:,71) - EMIP(:,13) + EMI(:,13) 
+        ! YP(:,:) = Y(:,:)
+
+        ! IF (ALL(EMI(:,1) == 0)) THEN
+        !     EMIP(:,1) = 0
+        ! ENDIF
+        ! YP(:,4) = Y(:,4) - EMIP(:,1) + EMI(:,1)
+
+        ! IF (ALL(EMI(:,2) == 0)) THEN
+        !     EMIP(:,2) = 0
+        ! ENDIF
+        ! YP(:,11) = Y(:,11) - EMIP(:,2) + EMI(:,2)
+
+
+        ! YP(:,39) = Y(:,39) - EMIP(:,3) + EMI(:,3)
+        ! YP(:,42) = Y(:,42) - EMIP(:,4) + EMI(:,4)
+        ! YP(:,73) = Y(:,73) - EMIP(:,5) + EMI(:,5)
+        ! YP(:,23) = Y(:,23) - EMIP(:,6) + EMI(:,6)
+        ! YP(:,30) = Y(:,30) - EMIP(:,7) + EMI(:,7)
+        ! YP(:,25) = Y(:,25) - EMIP(:,8) + EMI(:,8)
+        ! YP(:,32) = Y(:,32) - EMIP(:,9) + EMI(:,9)
+        ! YP(:,59) = Y(:,59) - EMIP(:,10) + EMI(:,10)
+        ! YP(:,61) = Y(:,61) - EMIP(:,11) + EMI(:,11)
+        ! YP(:,64) = Y(:,64) - EMIP(:,12) + EMI(:,12)
+        ! YP(:,71) = Y(:,71) - EMIP(:,13) + EMI(:,13) 
 
         !          O1D              Y(:,1) 
         P(:) = DJ(:,1) * Y(:,6)
@@ -5119,35 +5162,50 @@ CONTAINS
 
     END SUBROUTINE DERIV
 
-    SUBROUTINE WRITE(DTS)
+    SUBROUTINE WRITE(DTS, NCELL)
         IMPLICIT NONE
         REAL :: DTS
-        INTEGER :: PP, PC, TC, S
+        INTEGER :: NCELL, PP, PC, TC, S
 
-        517 FORMAT(ES9.3, 50(",", ES13.6e3))
+        517 FORMAT(ES9.3, 2(",", F6.3), 50(",", ES16.9e3))
         519 FORMAT(A, 50(",", A))
         520 FORMAT(A, 4(",", A))
-        521 FORMAT(ES9.3, 4(",", ES13.6e3))
+        521 FORMAT(ES9.3, 2(",", F6.3), 2(",", ES16.9e3))
+        522 FORMAT(ES9.3, 2(",", F6.3), 20(",", ES19.9e3))
         
         PI = 4.0*ATAN(1.0)
         
-        IF(TSTORE.LT.1.0.OR.(TIME1-TSTORE).EQ.3580) THEN
-            ! WRITE OUTPUT TO FILE
-            WRITE(15,517) TIME1,(Y(1,S)/M(1)*1.0E9, S=1,50)
+        ! WRITE OUTPUT TO FILE
+        DO CELL = 1,NCELL
 
-            WRITE(16,521) TIME1,SZA(1)*(180/PI),TEMP(1),O2(1),N2(1)       
+            WRITE(15,522) TIME1,LAT(CELL),LON(CELL),(Y(CELL,S)/M(CELL)*1.0E9, S=1,20)
+            WRITE(16, 521) TIME1,LAT(CELL),LON(CELL),SZA(CELL)*(180/PI),TEMP(CELL)
+            WRITE(17, 517) TIME1,LAT(CELL), LON(CELL),(J(CELL,PP), PP=1,50)
+            WRITE(18, 517) TIME1,LAT(CELL), LON(CELL),(DJ(CELL,PC),PC=1,50)
+            WRITE(19, 517) TIME1,LAT(CELL), LON(CELL),(RC(CELL,TC),TC=1,50)
 
-            WRITE(17,517) TIME1,(J(1,PP), PP=1,50)
+        END DO
 
-            WRITE(18,517) TIME1,(DJ(1,PC),PC=1,50)
+        TIME1 = TIME1 + DTS
 
-            WRITE(19,517) TIME1,(RC(1,TC),TC=1,50)
+        ! IF(TSTORE.LT.1.0.OR.(TIME1-TSTORE).EQ.(600-DTS)) THEN
+        !     ! WRITE OUTPUT TO FILE
+        !     DO CELL = 1,NCELL
+
+        !         WRITE(15,522) TIME1,LAT(CELL),LON(CELL),(Y(CELL,S)/M(CELL)*1.0E9, S=1,20)
+        !         WRITE(16, 521) TIME1,LAT(CELL),LON(CELL),SZA(CELL)*(180/PI),TEMP(CELL)
+        !         WRITE(17, 517) TIME1,LAT(CELL), LON(CELL),(J(CELL,PP), PP=1,50)
+        !         WRITE(18, 517) TIME1,LAT(CELL), LON(CELL),(DJ(CELL,PC),PC=1,50)
+        !         WRITE(19, 517) TIME1,LAT(CELL), LON(CELL),(RC(CELL,TC),TC=1,50)
+
+        !     END DO
+
             
-            TIME1 = TIME1 + DTS
-            TSTORE = TIME1
-        ELSE
-            TIME1 = TIME1 + DTS
-        END IF
+        !     TIME1 = TIME1 + DTS
+        !     TSTORE = TIME1
+        ! ELSE
+        !     TIME1 = TIME1 + DTS
+        ! END IF
  
     END SUBROUTINE WRITE
     
