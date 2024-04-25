@@ -2827,7 +2827,7 @@ CONTAINS
 
     END SUBROUTINE PHOTOL
 
-    SUBROUTINE DERIV(DTS, NCELL)
+    SUBROUTINE DERIV(DTS)
         IMPLICIT NONE
         REAL :: DTS
 
@@ -2844,7 +2844,7 @@ CONTAINS
         ! ENDIF
         ! YP(:,11) = Y(:,11) - EMIP(:,2) + EMI(:,2)
 
-
+        
         ! YP(:,39) = Y(:,39) - EMIP(:,3) + EMI(:,3)
         ! YP(:,42) = Y(:,42) - EMIP(:,4) + EMI(:,4)
         ! YP(:,73) = Y(:,73) - EMIP(:,5) + EMI(:,5)
